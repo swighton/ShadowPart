@@ -35,11 +35,14 @@ class VoxelVolume:
         absDelta = delta.abs()
         max = absDelta.maxVal()
         steps = ceil(max)
-        stride = 1.0 / (max * 2) # Serious hack to make sure we hit all voxels. TODO: Revisit interpolation
+        stride = 1.0 / (max * 1.5) # Serious hack to make sure we hit all voxels. TODO: Revisit interpolation
 
-        for i in frange(0, 1.0, stride):
-            nextPoint = (startPoint + (delta * i)).floor()
-            yield nextPoint
+        next = Point()
+        for i in range(0, int(steps)):
+            next._x = startPoint._x + delta._x * stride * i
+            next._y = startPoint._y + delta._y * stride * i
+            next._z = startPoint._z + delta._z * stride * i
+            yield next
 
     def inRange(self, coord):
         if coord[0] < 0: return False

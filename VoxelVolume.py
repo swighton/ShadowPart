@@ -27,7 +27,7 @@ class VoxelVolume:
         ''' Assuming coordinates are in voxel space
         '''
         for point in self.interpolate(startPoint, endPoint):
-            if self.inRange(point):
+            if self.inRange(point.toList()):
                 self._vol[point.x()][point.y()][point.z()] = val
 
     def interpolate(self, startPoint, endPoint):
@@ -35,30 +35,28 @@ class VoxelVolume:
         absDelta = delta.abs()
         max = absDelta.maxVal()
         steps = ceil(max)
-        stride = 1.0 / steps
+        stride = 1.0 / (max * 2) # Serious hack to make sure we hit all voxels. TODO: Revisit interpolation
 
         for i in frange(0, 1.0, stride):
             nextPoint = (startPoint + (delta * i)).floor()
             yield nextPoint
 
-    def inRange(self, point):
-        if point.x() < 0: return False
-        if point.y() < 0: return False
-        if point.z() < 0: return False
-        if point.x() >= self.size[0]: return False
-        if point.y() >= self.size[1]: return False
-        if point.z() >= self.size[2]: return False
+    def inRange(self, coord):
+        if coord[0] < 0: return False
+        if coord[1] < 0: return False
+        if coord[2] < 0: return False
+        if coord[0] >= self.size[0]: return False
+        if coord[1] >= self.size[1]: return False
+        if coord[2] >= self.size[2]: return False
         return True
-
 
     def toSTL(self, filePath):
         with open(filePath, "wb") as out:
 
             # 80 bytes of padding
+            # TODO: More pythonic way of doing this?
             for i in range(0, 80):
                 out.write(struct.pack('c', '0'))
-
-            #out.write(struct.pack('<f', 0))
 
             data = ""
 
@@ -89,11 +87,6 @@ class VoxelVolume:
                         transform = Transformations.translation_matrix((voxPoint).toList())
                         transform2 = Transformations.translation_matrix((0.5, 0, 0))
 
-                        #finalTransform = np.dot(transform2, transform)
-                        #finalTransform = np.dot(finalTransform, rotMat)
-                        #finalTransform = np.dot(transform, rotMat)
-
-                        #finalTransform = Transformations.concatenate_matrices([rotMat, transform, transform2])
                         txm = np.identity(4)
                         txm = np.dot(txm, scale)
                         txm = np.dot(txm, transform)
@@ -122,50 +115,72 @@ class VoxelVolume:
                         count = 0
                         for point in points:
 
-                            point.append(1)
-
-                            if count % 4 == 0:
-                                tx = np.dot(point, txm.T)
-                            else:
-                                tx = np.dot(point, txm.T)
+                            point.append(1) # ??? Makes sense for verticies, but not for normals
+                            tx = np.dot(point, txm.T)
 
                             data += struct.pack('<f', tx[0])
                             data += struct.pack('<f', tx[1])
                             data += struct.pack('<f', tx[2])
 
-
-                            #out.write(struct.pack('<f', tx[0]))
-                            #out.write(struct.pack('<f', tx[1]))
-                            #out.write(struct.pack('<f', tx[2]))
-
                             if (count + 1) % 4 == 0:
-                                #out.write(struct.pack('<H', 0))
                                 data += struct.pack('<H', 0)
 
                             count += 1
 
             # Write the face count
-            #out.seek(80)
             out.write(struct.pack('<I', faceCount))
+
+            # Write the data
             out.write(data)
 
     def voxelSet(self, coords):
         if self._vol[coords[0]][coords[1]][coords[2]] == 1:
             return True
 
+    def voxelSetClampedToRange(self, coord):
+        if self.inRange(coord):
+            if self._vol[coord[0]][coord[1]][coord[2]] == 1:
+                return True
+        else:
+            return False
+
+    def projectImage(self, img, imgSize, fromPoint, toPoint, comparison=None):
+        if comparison == None:
+            comparison = lambda x: x > 0
+
+        upVector = Point(0, 0, 1)  # Just going to assume up vector
+        rightVector = (toPoint - fromPoint).cross(upVector).normalized()
+        halfSize = [imgSize[0] / 2, imgSize[1] / 2]
+        for x in range(-halfSize[0], halfSize[0]):
+            for y in range(-halfSize[1], halfSize[1]):
+                delta = upVector * y + rightVector * x
+                if (comparison(img[x + halfSize[0], y + halfSize[1]][0])):
+                    self.cutRay(fromPoint + delta, toPoint + delta)
+
     def voxelFreeNeighbors(self, coords):
-        for vox in self.voxelNeighborhoodIterator(coords, 1):
-            if vox[0] == coords[0] and vox[1] == coords[1] and vox[2] == coords[2]:
-                continue
+        coords[0] += 1
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[0] -= 2
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[0] += 1
 
-            if (vox[0] != coords[0] and vox[1] != coords[1]) or (vox[1] != coords[1] and vox[2] != coords[2]) or (vox[0] != coords[0] and vox[2] != coords[2]):
-                continue
+        coords[1] += 1
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[1] -= 2
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[1] += 1
 
-            if self.inRange(Point(*vox)):
-                if self.voxelSet(vox):
-                    yield vox
-            else:
-                yield vox
+        coords[2] += 1
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[2] -= 2
+        if not self.voxelSetClampedToRange(coords):
+            yield coords
+        coords[2] += 1
 
     def voxelNeighborhoodIterator(self, coords, rad=1):
         for x in range(coords[0] - rad, coords[0] + rad + 1):

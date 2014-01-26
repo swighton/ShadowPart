@@ -70,6 +70,7 @@ class Point:
     def dot(self, point):
         return point._x * self._x + point._y * self._y + point._z * self._z
 
+    # Kind of nonsense if we call it a point. Ohwell
     def cross(self, point):
         return Point(
             (self.y() * point.z()) - (point.y() * self.z()),

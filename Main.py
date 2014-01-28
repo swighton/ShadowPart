@@ -16,9 +16,9 @@ def projectImage(image, startPos, endPos):
     pass
 
 def main(args=None):
-    img1 = loadImage("big_img_1.png")
-    img2 = loadImage("big_img_2.png")
-    img3 = loadImage("big_img_3.png")
+    img1 = loadImage("img_1.png")
+    img2 = loadImage("img_2.png")
+    img3 = loadImage("img_3.png")
 
     pix1 = img1.load()
     pix2 = img2.load()
